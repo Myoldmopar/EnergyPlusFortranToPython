@@ -1,0 +1,11 @@
+os: linux
+dist: bionic
+language: python
+python: 3.6
+
+jobs:
+  include:
+  - name: Linux E+ Tests
+    script: nosetests
+  - name: Flake8
+    script: python3 setup.py flake8
