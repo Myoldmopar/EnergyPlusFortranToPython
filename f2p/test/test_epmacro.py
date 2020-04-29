@@ -9,14 +9,6 @@ from f2p.helpers import path_to_bin_ep_macro
 
 # things to test:
 
-# PATH PREFIXING
-# ##fileprefix {prefixpathname}
-
-# FILE INCLUSION
-# ##include {includefilename}
-# ##includesilent {includefilename}
-# ##nosilent
-
 # DEBUGGING
 # ##list
 # ##nolist
@@ -42,6 +34,15 @@ from f2p.helpers import path_to_bin_ep_macro
 # true is any other character
 # literals are limited to 40 chars
 
+# ERRONEOUS CONDITIONS
+# Missing in.imf
+# Missing include files
+# Bad syntax
+# Invalid operators
+# Recursion fails
+
+# LIMITING CONDITIONS?  No, we just won't have them
+
 class TestEPMacro(TestCase):
 
     def setUp(self) -> None:
@@ -62,6 +63,93 @@ class TestEPMacro(TestCase):
     def _write_in_imf_text(self, contents: str):
         with self.in_imf_path.open('w'):
             self.in_imf_path.write_text(contents)
+
+
+class TestInclusion(TestEPMacro):
+
+    def test_basic_include(self):
+        include_file_path = self.working_directory / 'include.in'
+        with include_file_path.open('w'):
+            include_file_path.write_text('included lines of\ntext\n')
+        self._write_in_imf_text("""
+LINE1
+##include include.in
+LINE3
+""")
+        self._run_ep_macro()
+        output = self.out_idf_path.read_text().strip()
+        self.assertEqual('LINE1\nincluded lines of\ntext\nLINE3', output)
+
+    def test_basic_include_newline_added(self):
+        include_file_path = self.working_directory / 'include.in'
+        with include_file_path.open('w'):
+            include_file_path.write_text('included lines of\ntext')
+        self._write_in_imf_text("""
+LINE1
+##include include.in
+LINE3
+""")
+        self._run_ep_macro()
+        output = self.out_idf_path.read_text().strip()
+        self.assertEqual('LINE1\nincluded lines of\ntext\nLINE3', output)
+
+    def test_include_in_subdir(self):
+        sub_dir = self.working_directory / 'inc'
+        sub_dir.mkdir()
+        include_file_path = sub_dir / 'include.in'
+        with include_file_path.open('w'):
+            include_file_path.write_text('included_contents')
+        self._write_in_imf_text(f"""
+LINE1
+##fileprefix {sub_dir}/
+##include include.in
+LINE3
+""")
+        self._run_ep_macro()
+        output = self.out_idf_path.read_text().strip()
+        self.assertEqual('LINE1\nincluded_contents\nLINE3', output)
+        # path can be on the filename instead...
+        self._write_in_imf_text(f"""
+LINE1
+##fileprefix {sub_dir}
+##include /include.in
+LINE3
+""")
+        self._run_ep_macro()
+        output = self.out_idf_path.read_text().strip()
+        self.assertEqual('LINE1\nincluded_contents\nLINE3', output)
+
+    def test_nested_include(self):
+        include_file_path_1 = self.working_directory / 'include1.in'
+        with include_file_path_1.open('w'):
+            include_file_path_1.write_text('include_1_line_1\n##include include2.in\ninclude_1_line_2')
+        include_file_path_2 = self.working_directory / 'include2.in'
+        with include_file_path_2.open('w'):
+            include_file_path_2.write_text('include_2_contents')
+        self._write_in_imf_text("""
+LINE1
+##include include1.in
+LINE3
+""")
+        self._run_ep_macro()
+        output = self.out_idf_path.read_text().strip()
+        self.assertEqual('LINE1\ninclude_1_line_1\ninclude_2_contents\ninclude_1_line_2\nLINE3', output)
+
+    def test_silent_include_operations(self):
+        include_file_path = self.working_directory / 'include.in'
+        with include_file_path.open('w'):
+            include_file_path.write_text('included_contents')
+        self._write_in_imf_text("""
+LINE1
+##includesilent include.in
+##nosilent
+##includesilent include.in
+LINE3
+""")
+        self._run_ep_macro()
+        output = self.out_idf_path.read_text().strip()
+        # EPMACRO BUG: I can't get includesilent to do anything different than include
+        self.assertEqual('LINE1\nincluded_contents\nincluded_contents\nLINE3', output)
 
 
 class TestDefines(TestEPMacro):
